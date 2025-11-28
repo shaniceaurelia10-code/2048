@@ -1,0 +1,177 @@
+import curses
+from random import choice, randint
+
+def init_board():
+    """Create 4x4 board filled with zeros."""
+    return [[0 for _ in range(4)] for _ in range(4)]
+
+
+def add_new_tile(board):
+    """Place a 2 or 4 on a random empty cell."""
+    empty_cells = [(r, c) for r in range(4) for c in range(4) if board[r][c] == 0]
+    if not empty_cells:
+        return
+
+    r, c = choice(empty_cells)
+    board[r][c] = 4 if randint(1, 10) == 1 else 2   # 10% chance of 4
+
+
+def compress(row):
+    """Push all numbers to the left (remove zeros in between)."""
+    new_row = [num for num in row if num != 0]
+    new_row += [0] * (4 - len(new_row))
+    return new_row
+
+
+def merge(row):
+    """Merge tiles (left direction)."""
+    for i in range(3):
+        if row[i] != 0 and row[i] == row[i + 1]:
+            row[i] *= 2
+            row[i + 1] = 0
+    return row
+
+
+def reverse(row):
+    """Reverse row (for right moves)."""
+    return row[::-1]
+
+
+def transpose(board):
+    """Transpose 4x4 board (swap rows & columns)."""
+    return [list(row) for row in zip(*board)]
+
+
+def move_left(board):
+    moved = False
+    new_board = []
+
+    for row in board:
+        compressed = compress(row)
+        merged = merge(compressed)
+        final = compress(merged)
+        new_board.append(final)
+        if final != row:
+            moved = True
+
+    return new_board, moved
+
+
+def move_right(board):
+    reversed_board = [reverse(row) for row in board]
+    moved_board, moved = move_left(reversed_board)
+    final_board = [reverse(row) for row in moved_board]
+    return final_board, moved
+
+
+def move_up(board):
+    transposed = transpose(board)
+    moved_board, moved = move_left(transposed)
+    final_board = transpose(moved_board)
+    return final_board, moved
+
+
+def move_down(board):
+    transposed = transpose(board)
+    moved_board, moved = move_right(transposed)
+    final_board = transpose(moved_board)
+    return final_board, moved
+
+
+def can_move(board):
+    """Check if any move is possible."""
+    # Empty spots exist
+    for row in board:
+        if 0 in row:
+            return True
+
+    # Horizontal merge possible
+    for r in range(4):
+        for c in range(3):
+            if board[r][c] == board[r][c + 1]:
+                return True
+
+    # Vertical merge possible
+    for c in range(4):
+        for r in range(3):
+            if board[r][c] == board[r + 1][c]:
+                return True
+
+    return False
+
+
+def draw_board(stdscr, board, score):
+    stdscr.clear()
+
+    stdscr.addstr(0, 0, "=== 2048 Game (Curses Version) ===")
+    stdscr.addstr(1, 0, "Use Arrow Keys or W/A/S/D   |   Q = Quit")
+    stdscr.addstr(2, 0, f"Score: {score}")
+    stdscr.addstr(3, 0, "-" * 30)
+
+    for r in range(4):
+        row_str = ""
+        for c in range(4):
+            val = board[r][c]
+            cell = f"{val}".rjust(5) if val != 0 else "  .  "
+            row_str += cell
+        stdscr.addstr(5 + r, 0, row_str)
+
+    stdscr.refresh()
+
+
+def main(stdscr):
+    curses.curs_set(0)
+
+    board = init_board()
+    score = 0
+
+    add_new_tile(board)
+    add_new_tile(board)
+
+    while True:
+        draw_board(stdscr, board, score)
+
+        key = stdscr.getch()
+
+        if key in (ord('q'), ord('Q')):
+            break
+
+        # Map keys to moves
+        moves = {
+            curses.KEY_LEFT: move_left,
+            curses.KEY_RIGHT: move_right,
+            curses.KEY_UP: move_up,
+            curses.KEY_DOWN: move_down,
+            ord('a'): move_left,
+            ord('d'): move_right,
+            ord('w'): move_up,
+            ord('s'): move_down,
+        }
+
+        if key not in moves:
+            continue
+
+        move_func = moves[key]
+        new_board, moved = move_func(board)
+
+        if moved:
+            # Calculate score (sum of merges)
+            for r in range(4):
+                for c in range(4):
+                    if new_board[r][c] > board[r][c]:
+                        score += new_board[r][c]  # gained from merge
+
+            board = new_board
+            add_new_tile(board)
+
+        if not can_move(board):
+            draw_board(stdscr, board, score)
+            stdscr.addstr(10, 0, "GAME OVER! No more moves available.")
+            stdscr.addstr(12, 0, "Press any key to quit...")
+            stdscr.getch()
+            break
+
+
+# Run the game
+if __name__ == "__main__":
+    curses.wrapper(main)
